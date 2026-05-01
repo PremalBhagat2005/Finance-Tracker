@@ -5,8 +5,9 @@ import datetime
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from Home import get_transactions_data, GOOGLE_SHEET_ID
-from services.google_sheets import get_sheets_service, read_sheet
+from Home import get_transactions_data, init_session_state, render_auth_ui
+from services.auth import get_current_user, is_authenticated, logout_user
+from services.mongo_store import get_pending_dataframe
 
 
 def get_date_filters() -> tuple[datetime.date, datetime.date]:
@@ -30,28 +31,16 @@ def get_date_filters() -> tuple[datetime.date, datetime.date]:
 
 
 @st.cache_data(ttl=300)
-def get_pending_data() -> pd.DataFrame:
-    service = get_sheets_service()
-    rows = read_sheet(service, GOOGLE_SHEET_ID, "Pending")
-    expected_columns = ["Date", "Amount", "Type", "Category", "Description", "Due Date", "Status"]
-    if len(rows) <= 1:
-        return pd.DataFrame(columns=expected_columns)
-
-    df = pd.DataFrame(rows[1:], columns=rows[0])
-    for column in expected_columns:
-        if column not in df.columns:
-            df[column] = ""
-
-    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df["Due Date"] = pd.to_datetime(df["Due Date"], errors="coerce")
-    df["Status"] = df["Status"].fillna("Pending")
+def get_pending_data(user_id: str) -> pd.DataFrame:
+    df = get_pending_dataframe(user_id)
+    if df.empty:
+        return pd.DataFrame(columns=["Date", "Amount", "Type", "Category", "Description", "Due Date", "Status"])
     return df
 
 
-def show_pending_analytics():
+def show_pending_analytics(user_id: str):
     st.subheader("⏳ Pending Transactions")
-    pending_df = get_pending_data()
+    pending_df = get_pending_data(user_id)
 
     if pending_df.empty:
         st.info("No pending transactions found.")
@@ -194,10 +183,18 @@ def show_overview_analytics(df: pd.DataFrame):
 
 def main():
     st.set_page_config(page_title="Analytics", page_icon="📊", layout="wide")
+    init_session_state()
+    if not is_authenticated():
+        if render_auth_ui():
+            st.switch_page("Home.py")
+        return
+
+    user = get_current_user()
     st.title("Financial Analytics Dashboard")
+    st.sidebar.button("Log out", on_click=logout_user)
     start_date, end_date = get_date_filters()
     with st.spinner("Loading transactions..."):
-        df = get_transactions_data()
+        df = get_transactions_data(user["user_id"])
     if df.empty:
         st.info("📭 No transactions yet. Go to the Home page and add some transactions first!")
         return
@@ -208,7 +205,7 @@ def main():
         st.info("📭 No transactions found for the selected date range.")
         return
     show_overview_analytics(filtered_df)
-    show_pending_analytics()
+    show_pending_analytics(user["user_id"])
 
 
 if __name__ == "__main__":

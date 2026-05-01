@@ -9,11 +9,12 @@ from dotenv import load_dotenv
 from dateutil import parser as dateutil_parser
 from dateutil.relativedelta import relativedelta
 from config.constants import TRANSACTION_TYPES, CATEGORIES
-from services.google_sheets import get_sheets_service, initialize_sheet, read_sheet, append_row, update_row
+from services.auth import authenticate_user, get_current_user, is_authenticated, logout_user, register_user, set_current_user
+from services.mongo_store import ensure_indexes, find_pending_match, get_expenses_dataframe, get_pending_dataframe, insert_expense, insert_pending, insert_income, update_pending_status
+from services.google_sheets import export_user_data
 from utils.logging_utils import logger
 
 load_dotenv()
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 
 
 def init_session_state():
@@ -31,6 +32,59 @@ def init_session_state():
 		st.session_state.global_selected_year = datetime.datetime.now().year
 	if "global_selected_month" not in st.session_state:
 		st.session_state.global_selected_month = 1
+	if "authenticated" not in st.session_state:
+		st.session_state.authenticated = False
+	if "current_user" not in st.session_state:
+		st.session_state.current_user = None
+
+
+def render_auth_ui() -> bool:
+	st.title("Smart Finance Tracker")
+	st.subheader("Sign in to continue")
+	st.caption("Create one account per person. Each account stores its own expenses in MongoDB.")
+
+	login_tab, register_tab = st.tabs(["Login", "Create account"])
+	auth_success = False
+
+	with login_tab:
+		with st.form("login_form", clear_on_submit=False):
+			email = st.text_input("Email")
+			password = st.text_input("Password", type="password")
+			submit = st.form_submit_button("Login")
+		if submit:
+			try:
+				user = authenticate_user(email, password)
+				if user:
+					set_current_user(user)
+					st.success(f"Welcome back, {user['name']}.")
+					auth_success = True
+				else:
+					st.error("Invalid email or password.")
+			except Exception as e:
+				st.error(f"Login failed: {e}")
+
+	with register_tab:
+		with st.form("register_form", clear_on_submit=False):
+			name = st.text_input("Name")
+			email = st.text_input("Email ", key="register_email")
+			password = st.text_input("Password ", type="password", key="register_password")
+			confirm_password = st.text_input("Confirm password", type="password")
+			submit = st.form_submit_button("Create account")
+		if submit:
+			if password != confirm_password:
+				st.error("Passwords do not match.")
+			elif not name.strip() or not email.strip() or not password:
+				st.error("Please fill in all fields.")
+			else:
+				try:
+					user = register_user(name, email, password)
+					set_current_user(user)
+					st.success(f"Account created for {user['name']}.")
+					auth_success = True
+				except Exception as e:
+					st.error(f"Registration failed: {e}")
+
+	return auth_success
 
 
 @st.cache_resource
@@ -39,15 +93,10 @@ def get_gemini_client():
 
 
 @st.cache_data(ttl=300)
-def get_transactions_data():
-	service = get_sheets_service()
-	rows = read_sheet(service, GOOGLE_SHEET_ID, 'Expenses')
-	if len(rows) > 1:
-		df = pd.DataFrame(rows[1:], columns=rows[0])
-	else:
+def get_transactions_data(user_id: str):
+	df = get_expenses_dataframe(user_id)
+	if df.empty:
 		return pd.DataFrame(columns=['Date', 'Amount', 'Type', 'Category', 'Subcategory', 'Description'])
-	df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-	df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 	return df
 
 
@@ -243,32 +292,25 @@ TYPE: """
 
 def handle_received_pending_transaction(amount: float, description: str) -> dict:
 	try:
-		service = get_sheets_service()
-		rows = read_sheet(service, GOOGLE_SHEET_ID, 'Pending')
-		if len(rows) < 2:
-			return {"auto_processed": False, "error": "No pending transactions found"}
+		user = get_current_user()
+		if not user:
+			return {"auto_processed": False, "error": "Please log in to save transactions."}
 
-		headers = rows[0]
-		amount_idx = headers.index('Amount')
-		type_idx = headers.index('Type')
-		status_idx = headers.index('Status')
+		pending_doc = find_pending_match(user["user_id"], amount, "To Receive")
+		if not pending_doc:
+			return {"auto_processed": False, "error": f"No matching pending 'To Receive' transaction found for amount {amount}"}
 
-		for i, row in enumerate(rows[1:]):
-			if len(row) <= max(amount_idx, type_idx, status_idx):
-				continue
-			if row[type_idx] == "To Receive" and row[status_idx] == "Pending":
-				try:
-					if abs(float(row[amount_idx]) - amount) < 0.01:
-						row_number = i + 2
-						update_row(service, GOOGLE_SHEET_ID, 'Pending', f"G{row_number}", ["Received"])
-						today = datetime.datetime.now().strftime("%Y-%m-%d")
-						append_row(service, GOOGLE_SHEET_ID, 'Expenses', [today, amount, "Income", "Other", "Pending Received", description])
-						st.cache_data.clear()
-						return {"auto_processed": True, "type": "Income", "amount": amount, "description": description, "category": "Other", "subcategory": "Pending Received", "date": datetime.datetime.now(), "due_date": None}
-				except ValueError:
-					continue
-
-		return {"auto_processed": False, "error": f"No matching pending 'To Receive' transaction found for amount {amount}"}
+		update_pending_status(pending_doc["_id"], "Received")
+		insert_income(user["user_id"], {
+			"date": datetime.datetime.utcnow(),
+			"amount": amount,
+			"type": "Income",
+			"category": "Other",
+			"subcategory": "Pending Received",
+			"description": description,
+		})
+		st.cache_data.clear()
+		return {"auto_processed": True, "type": "Income", "amount": amount, "description": description, "category": "Other", "subcategory": "Pending Received", "date": datetime.datetime.now(), "due_date": None}
 	except Exception as e:
 		logger.error(str(e))
 		return {"auto_processed": False, "error": str(e)}
@@ -276,32 +318,25 @@ def handle_received_pending_transaction(amount: float, description: str) -> dict
 
 def handle_paid_pending_transaction(amount: float, description: str) -> dict:
 	try:
-		service = get_sheets_service()
-		rows = read_sheet(service, GOOGLE_SHEET_ID, 'Pending')
-		if len(rows) < 2:
-			return {"auto_processed": False, "error": "No pending transactions found"}
+		user = get_current_user()
+		if not user:
+			return {"auto_processed": False, "error": "Please log in to save transactions."}
 
-		headers = rows[0]
-		amount_idx = headers.index('Amount')
-		type_idx = headers.index('Type')
-		status_idx = headers.index('Status')
+		pending_doc = find_pending_match(user["user_id"], amount, "To Pay")
+		if not pending_doc:
+			return {"auto_processed": False, "error": f"No matching pending 'To Pay' transaction found for amount {amount}"}
 
-		for i, row in enumerate(rows[1:]):
-			if len(row) <= max(amount_idx, type_idx, status_idx):
-				continue
-			if row[type_idx] == "To Pay" and row[status_idx] == "Pending":
-				try:
-					if abs(float(row[amount_idx]) - amount) < 0.01:
-						row_number = i + 2
-						update_row(service, GOOGLE_SHEET_ID, 'Pending', f"G{row_number}", ["Paid"])
-						today = datetime.datetime.now().strftime("%Y-%m-%d")
-						append_row(service, GOOGLE_SHEET_ID, 'Expenses', [today, amount, "Expense", "Other", "Pending Paid", description])
-						st.cache_data.clear()
-						return {"auto_processed": True, "type": "Expense", "amount": amount, "description": description, "category": "Other", "subcategory": "Pending Paid", "date": datetime.datetime.now(), "due_date": None}
-				except ValueError:
-					continue
-
-		return {"auto_processed": False, "error": f"No matching pending 'To Pay' transaction found for amount {amount}"}
+		update_pending_status(pending_doc["_id"], "Paid")
+		insert_expense(user["user_id"], {
+			"date": datetime.datetime.utcnow(),
+			"amount": amount,
+			"type": "Expense",
+			"category": "Other",
+			"subcategory": "Pending Paid",
+			"description": description,
+		})
+		st.cache_data.clear()
+		return {"auto_processed": True, "type": "Expense", "amount": amount, "description": description, "category": "Other", "subcategory": "Pending Paid", "date": datetime.datetime.now(), "due_date": None}
 	except Exception as e:
 		logger.error(str(e))
 		return {"auto_processed": False, "error": str(e)}
@@ -504,7 +539,10 @@ Pick CATEGORY and SUBCATEGORY only from the lists above."""
 
 def add_transaction_to_sheet(transaction: dict) -> bool:
 	try:
-		service = get_sheets_service()
+		user = get_current_user()
+		if not user:
+			raise RuntimeError("Please log in to save transactions.")
+
 		date_val = transaction.get("date", datetime.datetime.now())
 		if isinstance(date_val, datetime.datetime):
 			date_str = date_val.strftime("%Y-%m-%d")
@@ -527,9 +565,34 @@ def add_transaction_to_sheet(transaction: dict) -> bool:
 			due_date_str = ""
 
 		if trans_type in ["To Pay", "To Receive"]:
-			append_row(service, GOOGLE_SHEET_ID, 'Pending', [date_str, amount, trans_type, category, description, due_date_str, "Pending"])
+			insert_pending(user["user_id"], {
+				"date": datetime.datetime.strptime(date_str, "%Y-%m-%d"),
+				"amount": amount,
+				"type": trans_type,
+				"category": category,
+				"description": description,
+				"due_date": datetime.datetime.strptime(due_date_str, "%Y-%m-%d") if due_date_str else None,
+				"status": "Pending",
+			})
 		else:
-			append_row(service, GOOGLE_SHEET_ID, 'Expenses', [date_str, amount, trans_type, category, subcategory, description])
+			if trans_type == "Income":
+				insert_income(user["user_id"], {
+					"date": datetime.datetime.strptime(date_str, "%Y-%m-%d"),
+					"amount": amount,
+					"type": trans_type,
+					"category": category,
+					"subcategory": subcategory,
+					"description": description,
+				})
+			else:
+				insert_expense(user["user_id"], {
+					"date": datetime.datetime.strptime(date_str, "%Y-%m-%d"),
+					"amount": amount,
+					"type": trans_type,
+					"category": category,
+					"subcategory": subcategory,
+					"description": description,
+				})
 		st.cache_data.clear()
 		return True
 	except Exception as e:
@@ -611,10 +674,20 @@ def show_transaction_form():
 def main():
 	st.set_page_config(page_title="Smart Finance Tracker", page_icon="💰", layout="wide")
 	init_session_state()
-	service = get_sheets_service()
-	if not initialize_sheet(service, GOOGLE_SHEET_ID):
-		st.warning("Google Sheets is not accessible yet. Share the spreadsheet with the service account from credentials.json, then reload the app.")
+	if not is_authenticated():
+		if render_auth_ui():
+			st.rerun()
+		return
+
+	try:
+		ensure_indexes()
+	except Exception as e:
+		st.error(f"MongoDB connection failed: {e}")
+		return
+
+	user = get_current_user()
 	st.title(" Smart Finance Tracker")
+	st.caption(f"Signed in as {user['name']} ({user['email']})")
 
 	st.sidebar.title(" How to use")
 	st.sidebar.markdown("""
@@ -626,11 +699,28 @@ def main():
 	- 'Paid pending amount of 5000'
 	""")
 	st.sidebar.divider()
+	if st.sidebar.button("Log out"):
+		logout_user()
+		st.rerun()
 	if st.sidebar.button("🗑️ Clear Chat History"):
 		st.session_state.messages = []
 		st.session_state.current_transaction = None
 		st.session_state.form_submitted = False
 		st.rerun()
+	
+	st.sidebar.divider()
+	# st.sidebar.subheader("📊 Export Data")
+	# if st.sidebar.button("Download to Google Sheets"):
+	# 	try:
+	# 		success, sheet_id = export_user_data(user['_id'])
+	# 		if success:
+	# 			st.sidebar.success(f"✅ Data exported! Sheet ID: {sheet_id}")
+	# 			st.sidebar.markdown(f"[Open in Google Sheets](https://docs.google.com/spreadsheets/d/{sheet_id})")
+	# 		else:
+	# 			st.sidebar.error("❌ Export failed. Check your credentials.")
+	# 	except Exception as e:
+	# 		st.sidebar.error(f"❌ Error: {str(e)}")
+	# 		logger.error(f"Export error: {str(e)}")
 
 	for msg in st.session_state.messages:
 		with st.chat_message(msg["role"]):

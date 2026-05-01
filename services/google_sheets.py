@@ -20,11 +20,8 @@ def get_sheets_service():
         scopes = ['https://www.googleapis.com/auth/spreadsheets']
 
         if credentials_source.startswith('{'):
-            credentials_path = Path(__file__).resolve().parent.parent / 'credentials.json'
-            if not credentials_path.exists():
-                raise FileNotFoundError('GOOGLE_SHEETS_CREDENTIALS is not a valid file path and credentials.json was not found')
-            creds = service_account.Credentials.from_service_account_file(
-                str(credentials_path),
+            creds = service_account.Credentials.from_service_account_info(
+                json.loads(credentials_source),
                 scopes=scopes
             )
         else:
@@ -99,6 +96,28 @@ def initialize_sheet(service, sheet_id):
                 body={'values': [['Date', 'Amount', 'Type', 'Category', 'Description', 'Due Date', 'Status']]}
             ).execute()
 
+        if 'Income' not in existing_titles:
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body={
+                    'requests': [
+                        {
+                            'addSheet': {
+                                'properties': {
+                                    'title': 'Income'
+                                }
+                            }
+                        }
+                    ]
+                }
+            ).execute()
+            service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range='Income!A1',
+                valueInputOption='USER_ENTERED',
+                body={'values': [['Date', 'Amount', 'Type', 'Category', 'Subcategory', 'Description']]}
+            ).execute()
+
         return True
     except HttpError as e:
         logger.error(str(e))
@@ -145,3 +164,71 @@ def update_row(service, sheet_id, sheet_name, range_: str, values: list):
     except Exception as e:
         logger.error(str(e))
         raise
+
+
+def export_user_data(user_id: str):
+    """Export all user data to Google Sheet"""
+    try:
+        from services.mongo_store import get_expenses_dataframe, get_income_dataframe, get_pending_dataframe
+        from bson import ObjectId
+        
+        service = get_sheets_service()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID')
+        
+        # Initialize sheets
+        initialize_sheet(service, sheet_id)
+        
+        # Helper to convert DataFrame to sheet values, handling ObjectId
+        def df_to_values(df):
+            # Remove _id column if present
+            if '_id' in df.columns:
+                df = df.drop('_id', axis=1)
+            
+            if df.empty:
+                return [df.columns.tolist()]
+            values = [df.columns.tolist()]
+            for _, row in df.iterrows():
+                row_values = []
+                for val in row.values:
+                    if isinstance(val, ObjectId):
+                        row_values.append(str(val))
+                    elif val is None or (isinstance(val, float) and str(val) == 'nan'):
+                        row_values.append("")
+                    else:
+                        row_values.append(str(val))
+                values.append(row_values)
+            return values
+        
+        # Clear and write expenses
+        expenses_df = get_expenses_dataframe(user_id)
+        service.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range='Expenses!A1',
+            valueInputOption='USER_ENTERED',
+            body={'values': df_to_values(expenses_df)}
+        ).execute()
+        
+        # Clear and write pending
+        pending_df = get_pending_dataframe(user_id)
+        service.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range='Pending!A1',
+            valueInputOption='USER_ENTERED',
+            body={'values': df_to_values(pending_df)}
+        ).execute()
+        
+        # Clear and write income
+        income_df = get_income_dataframe(user_id)
+        service.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range='Income!A1',
+            valueInputOption='USER_ENTERED',
+            body={'values': df_to_values(income_df)}
+        ).execute()
+        
+        return True, sheet_id
+    except Exception as e:
+        logger.error(f"Export failed: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False, None

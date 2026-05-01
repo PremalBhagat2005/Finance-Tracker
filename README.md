@@ -1,8 +1,10 @@
 # Smart Finance Tracker
 
-Smart Finance Tracker is a personal AI-powered expense and income tracking app built with Streamlit, Google Gemini, and Google Sheets.
+Smart Finance Tracker is an AI-powered expense and income tracking app built with Streamlit, Google Gemini, and MongoDB.
 
-It lets you type transactions in natural language (for example, "spent 450 on recharge" or "will receive 14000 from job tomorrow"), then auto-detects amount, type, category, date, and pending status before saving to Google Sheets.
+It originally used Google Sheets as the main storage layer, but it was migrated to MongoDB for better performance, scalability, and multi-user data handling. Google Sheets is now used for optional exports and downloadable reports.
+
+It lets you type transactions in natural language (for example, "spent 450 on recharge" or "will receive 14000 from job tomorrow"), then auto-detects amount, type, category, date, and pending status before saving to MongoDB.
 
 ## Project Highlights
 
@@ -15,8 +17,9 @@ It lets you type transactions in natural language (for example, "spent 450 on re
 - Auto date parsing (`today`, `yesterday`, `tomorrow`, `last/next ...`)
 - Keyword-enhanced category mapping for better reliability
 - Pending transaction workflow:
-  - Save future/pending items in `Pending` sheet
+  - Save future/pending items in MongoDB
   - Auto-mark received/paid pending entries
+- Google Sheets export for user reports and downloadable backups
 - Analytics dashboard with:
   - Income vs Expense KPIs
   - Monthly trend chart
@@ -31,7 +34,8 @@ It lets you type transactions in natural language (for example, "spent 450 on re
 - Python 3.14
 - Streamlit 1.56+
 - Gemini via `google-genai` (official SDK)
-- Google Sheets API v4
+- MongoDB Atlas or self-hosted MongoDB as the primary database
+- Google Sheets API for exports and reports
 - pandas 3.x
 - Plotly Express 6.x
 - Rich logging
@@ -43,19 +47,20 @@ smart-finance-tracker/
 ├── Home.py
 ├── requirements.txt
 ├── .env
-├── .gitignore
-├── credentials.json
 ├── README.md
 ├── config/
 │   ├── __init__.py
 │   └── constants.py
 ├── services/
 │   ├── __init__.py
-│   └── google_sheets.py
+│   ├── auth.py
+│   ├── google_sheets.py
+│   └── mongo_store.py
 ├── utils/
 │   ├── __init__.py
 │   └── logging_utils.py
 └── pages/
+  ├── 0_Login.py
     └── 📊_Analytics.py
 ```
 
@@ -89,18 +94,24 @@ Create/update `.env`:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key
+MONGODB_URI=your_mongodb_connection_string
+MONGODB_DB_NAME=smart_finance_tracker
 GOOGLE_SHEETS_CREDENTIALS=credentials.json
 GOOGLE_SHEET_ID=your_google_sheet_id
 ```
 
-### 5. Google Sheets setup
+### 5. MongoDB setup
 
-1. Create a Google Sheet.
-2. Copy the Sheet ID into `GOOGLE_SHEET_ID`.
-3. Keep service account JSON in `credentials.json`.
-4. Share the Google Sheet with your service account email (`client_email` from `credentials.json`) as **Editor**.
+1. Create a MongoDB Atlas cluster or use a self-hosted MongoDB instance.
+2. Copy the connection string into `MONGODB_URI`.
+3. Set `MONGODB_DB_NAME` if you want a different database name.
+4. Make sure the app can reach MongoDB from your deployment host.
 
-Without sharing, Sheets API calls will fail with permission errors.
+### 6. Google Sheets export setup
+
+1. Create a Google Cloud service account and download the credentials JSON.
+2. Set `GOOGLE_SHEETS_CREDENTIALS` to the credentials file path.
+3. Set `GOOGLE_SHEET_ID` to the spreadsheet used for exports.
 
 ## Run the App
 
@@ -127,7 +138,7 @@ The app extracts and pre-fills details in a confirmation form before saving.
 
 ### Pending logic
 
-- Future incoming/outgoing records are stored in `Pending` sheet.
+- Future incoming/outgoing records are stored in MongoDB.
 - Completed pending records can be auto-processed:
   - Pending receive -> marks as `Received` and adds to `Expenses` as `Income`
   - Pending pay -> marks as `Paid` and adds to `Expenses` as `Expense`
@@ -144,33 +155,45 @@ Go to the Analytics page to view:
 - Weekday vs weekend spending
 - Pending table with future/open pending entries
 
-## Data Model (Google Sheets)
+## Data Model (MongoDB)
 
-### `Expenses` sheet columns
+### `expenses` collection fields
 
-- Date
-- Amount
-- Type
-- Category
-- Subcategory
-- Description
+- `user_id`
+- `Date`
+- `Amount`
+- `Type`
+- `Category`
+- `Subcategory`
+- `Description`
+- `created_at`
 
-### `Pending` sheet columns
+### `pending` collection fields
 
-- Date
-- Amount
-- Type
-- Category
-- Description
-- Due Date
-- Status
+- `user_id`
+- `Date`
+- `Amount`
+- `Type`
+- `Category`
+- `Description`
+- `Due Date`
+- `Status`
+- `created_at`
+
+### `users` collection fields
+
+- `name`
+- `email`
+- `password_salt`
+- `password_hash`
 
 ## Important Notes
 
-- This is a personal project and currently stores data in Google Sheets.
-- Chat history is kept in Streamlit session state and is not persisted as a separate chat log in Sheets.
-- Keep `.env` and `credentials.json` private.
-- Do not commit API keys or service-account secrets to public repositories.
+- Each signed-in user gets isolated expense and pending records in MongoDB by `user_id`.
+- Google Sheets is used only for export and sharing, not as the main data store.
+- Chat history is kept in Streamlit session state and is not persisted as a separate chat log.
+- Keep `.env` private.
+- Do not commit API keys or MongoDB credentials to public repositories.
 
 ## Known Practical Behavior
 
