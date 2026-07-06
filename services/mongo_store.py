@@ -2,17 +2,19 @@ import os
 import datetime as dt
 
 import pandas as pd
-import streamlit as st
 from bson import ObjectId
 from pymongo import ASCENDING, MongoClient
 
+_mongo_client = None
 
-@st.cache_resource
 def get_mongo_client():
-	uri = os.getenv("MONGODB_URI", "").strip()
-	if not uri:
-		raise RuntimeError("MONGODB_URI is not set")
-	return MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
+	global _mongo_client
+	if _mongo_client is None:
+		uri = os.getenv("MONGODB_URI", "").strip()
+		if not uri:
+			raise RuntimeError("MONGODB_URI is not set")
+		_mongo_client = MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
+	return _mongo_client
 
 
 def get_db():

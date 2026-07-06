@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import secrets
-import streamlit as st
+from flask import session
 
 from services.mongo_store import ensure_indexes, get_db
 
@@ -49,13 +49,13 @@ def authenticate_user(email: str, password: str):
 
 
 def set_current_user(user: dict):
-	st.session_state.authenticated = True
-	st.session_state.current_user = user
+	session["authenticated"] = True
+	session["current_user"] = user
 
 
 def get_current_user():
-	if st.session_state.get("authenticated") and st.session_state.get("current_user"):
-		return st.session_state.current_user
+	if session.get("authenticated") and session.get("current_user"):
+		return session.get("current_user")
 	return None
 
 
@@ -64,5 +64,4 @@ def is_authenticated() -> bool:
 
 
 def logout_user():
-	for key in ["authenticated", "current_user", "messages", "current_transaction", "form_submitted", "save_clicked"]:
-		st.session_state.pop(key, None)
+	session.clear()

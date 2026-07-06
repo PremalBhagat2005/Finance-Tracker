@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Finance Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% if session.get("authenticated") %}
+    <nav class="navbar glass">
+        <div class="nav-brand">
+            <i data-lucide="wallet"></i>
+            <span class="brand-text">FinanceTracker</span>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' else '' }}">Chat</a>
+            <a href="{{ url_for('analytics') }}" class="{{ 'active' if request.endpoint == 'analytics' else '' }}">Dashboard</a>
+        </div>
+        <div class="nav-user">
+            <span class="user-name">{{ session.get('current_user', {}).get('name') }}</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline btn-sm">Logout</a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // Custom SPA Router for smooth slide transitions
+        document.addEventListener('click', async (e) => {
+            const link = e.target.closest('.nav-links a');
+            if (!link) return;
+            
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+            
+            e.preventDefault();
+            const url = link.href;
+            if (url === window.location.href.split('#')[0]) return;
+
+            const isDashboard = url.includes('analytics');
+            const outClass = isDashboard ? 'page-slide-out-left' : 'page-slide-out-right';
+            const inClass = isDashboard ? 'page-slide-in-right' : 'page-slide-in-left';
+
+            const container = document.querySelector('.container');
+            
+            container.classList.add(outClass);
+            
+            try {
+                const response = await fetch(url);
+                const htmlString = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlString, 'text/html');
+                
+                const newContainer = doc.querySelector('.container');
+                const newNavLinks = doc.querySelector('.nav-links');
+                
+                setTimeout(() => {
+                    container.innerHTML = newContainer.innerHTML;
+                    if (newNavLinks) {
+                        document.querySelector('.nav-links').innerHTML = newNavLinks.innerHTML;
+                    }
+                    
+                    const scripts = container.querySelectorAll('script');
+                    scripts.forEach(oldScript => {
+                        const newScript = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                        if (oldScript.innerHTML) {
+                            newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        }
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    });
+
+                    window.history.pushState({}, '', url);
+                    document.title = doc.title;
+                    
+                    lucide.createIcons();
+
+                    container.classList.remove(outClass);
+                    container.classList.add(inClass);
+                    
+                    setTimeout(() => {
+                        container.classList.remove(inClass);
+                    }, 350);
+                    
+                }, 250);
+                
+            } catch (err) {
+                console.error(err);
+                window.location.href = url;
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            window.location.reload();
+        });
+    </script>
+</body>
+</html>

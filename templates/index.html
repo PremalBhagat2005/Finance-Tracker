@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="chat-wrapper">
+    <div class="chat-sidebar glass">
+        <h3>How to use</h3>
+        <p>Type transactions naturally:</p>
+        <ul>
+            <li>'Spent 500 on groceries yesterday'</li>
+            <li>'Got salary 50000 today'</li>
+            <li>'Need to pay rent 15000 next week'</li>
+            <li>'Received pending amount of 2000'</li>
+        </ul>
+        <hr>
+        <button id="btn-clear" class="btn btn-outline btn-block"><i data-lucide="trash-2"></i> Clear Chat History</button>
+    </div>
+
+    <div class="chat-main glass">
+        <div class="chat-history" id="chat-history">
+            <!-- Messages injected by JS -->
+        </div>
+
+        <div class="chat-input-area">
+            <form id="chat-form" class="chat-form">
+                <input type="text" id="user_input" placeholder="Type your transaction... e.g. 'Spent 500 on groceries yesterday'" required autofocus autocomplete="off">
+                <button type="submit" id="btn-send" class="btn btn-primary">Send</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Initial data from server
+    let messages = {{ messages | tojson | safe }};
+    let current_transaction = {{ current_transaction | tojson | safe }};
+    const transaction_types = {{ transaction_types | tojson | safe }};
+    const categories = {{ categories | tojson | safe }};
+
+    const chatHistory = document.getElementById("chat-history");
+    const chatForm = document.getElementById("chat-form");
+    const userInput = document.getElementById("user_input");
+    const btnSend = document.getElementById("btn-send");
+    const btnClear = document.getElementById("btn-clear");
+
+    function renderChat() {
+        chatHistory.innerHTML = "";
+        
+        // Render messages
+        messages.forEach(msg => {
+            const div = document.createElement("div");
+            div.className = `message ${msg.role}`;
+            
+            const label = document.createElement("div");
+            label.className = "message-label";
+            label.innerHTML = msg.role === 'assistant' ? '<i data-lucide="bot" style="width:14px; height:14px; margin-bottom:-2px"></i> Assistant' : '<i data-lucide="user" style="width:14px; height:14px; margin-bottom:-2px"></i> You';
+            div.appendChild(label);
+
+            const bubble = document.createElement("div");
+            bubble.className = "message-bubble";
+            
+            // Allow basic HTML in assistant messages (like bolding)
+            const content = document.createElement("span");
+            if (msg.role === 'assistant') {
+                content.innerHTML = msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            } else {
+                content.textContent = msg.content;
+            }
+            bubble.appendChild(content);
+            div.appendChild(bubble);
+            chatHistory.appendChild(div);
+        });
+
+        // Render loading state if waiting
+        if (chatForm.classList.contains("loading")) {
+            const div = document.createElement("div");
+            div.className = "message assistant";
+            div.innerHTML = `<div class="message-label"><i data-lucide="bot" style="width:14px; height:14px; margin-bottom:-2px"></i> Assistant</div><div class="message-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+            chatHistory.appendChild(div);
+        }
+
+        // Render confirmation form if exists
+        if (current_transaction) {
+            renderConfirmationForm();
+        }
+
+        // Initialize icons for newly rendered content
+        lucide.createIcons();
+
+        // Scroll to bottom smoothly
+        setTimeout(() => {
+            chatHistory.scrollTo({
+                top: chatHistory.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 10);
+    }
+
+    function renderConfirmationForm() {
+        const formDiv = document.createElement("div");
+        formDiv.className = "transaction-confirmation";
+        
+        let catsOptions = "";
+        let currentCats = categories[current_transaction.type] || {};
+        let catKeys = Object.keys(currentCats);
+        if (catKeys.length === 0) {
+            catsOptions = `<option value="Other">Other</option>`;
+        } else {
+            catKeys.forEach(c => {
+                catsOptions += `<option value="${c}" ${current_transaction.category === c ? 'selected' : ''}>${c}</option>`;
+            });
+        }
+
+        let subsOptions = "";
+        let currentSubs = currentCats[current_transaction.category] || ["Other"];
+        currentSubs.forEach(s => {
+            subsOptions += `<option value="${s}" ${current_transaction.subcategory === s ? 'selected' : ''}>${s}</option>`;
+        });
+
+        let typeOptions = "";
+        transaction_types.forEach(t => {
+            typeOptions += `<option value="${t}" ${current_transaction.type === t ? 'selected' : ''}>${t}</option>`;
+        });
+
+        let dueDateHtml = "";
+        if (["To Pay", "To Receive"].includes(current_transaction.type)) {
+            dueDateHtml = `
+            <div class="form-group">
+                <label>Due Date</label>
+                <input type="date" id="form-due-date" value="${current_transaction.due_date || ''}">
+            </div>`;
+        }
+
+        formDiv.innerHTML = `
+            <h4><i data-lucide="edit-3"></i> Confirm Transaction Details</h4>
+            <div class="transaction-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="form-date" value="${current_transaction.date || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (₹)</label>
+                        <input type="number" step="0.01" id="form-amount" value="${current_transaction.amount || 0}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="form-type" required>${typeOptions}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="form-category" required>${catsOptions}</select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Subcategory</label>
+                        <select id="form-subcategory" required>${subsOptions}</select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="form-description" value="${current_transaction.description || ''}" required>
+                </div>
+                ${dueDateHtml}
+                <div class="form-actions">
+                    <button id="btn-save-tx" class="btn btn-primary"><i data-lucide="check"></i> Save Transaction</button>
+                    <button id="btn-cancel-tx" class="btn btn-outline">Cancel</button>
+                </div>
+            </div>
+        `;
+        chatHistory.appendChild(formDiv);
+
+        // Add event listeners to dynamic form
+        setTimeout(() => {
+            const typeSelect = document.getElementById("form-type");
+            const catSelect = document.getElementById("form-category");
+            
+            typeSelect.addEventListener("change", (e) => {
+                current_transaction.type = e.target.value;
+                let cCats = categories[current_transaction.type] || {};
+                let cKeys = Object.keys(cCats);
+                current_transaction.category = cKeys.length > 0 ? cKeys[0] : "Other";
+                current_transaction.subcategory = (cCats[current_transaction.category] || ["Other"])[0];
+                renderChat(); // Re-render to update selects
+            });
+
+            catSelect.addEventListener("change", (e) => {
+                current_transaction.category = e.target.value;
+                let cCats = categories[current_transaction.type] || {};
+                current_transaction.subcategory = (cCats[current_transaction.category] || ["Other"])[0];
+                renderChat(); // Re-render to update selects
+            });
+
+            document.getElementById("btn-save-tx").addEventListener("click", () => {
+                const txData = {
+                    date: document.getElementById("form-date").value,
+                    amount: parseFloat(document.getElementById("form-amount").value),
+                    type: document.getElementById("form-type").value,
+                    category: document.getElementById("form-category").value,
+                    subcategory: document.getElementById("form-subcategory").value,
+                    description: document.getElementById("form-description").value,
+                    due_date: document.getElementById("form-due-date") ? document.getElementById("form-due-date").value : null
+                };
+                
+                fetch("/api/confirm", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(txData)
+                }).then(res => res.json()).then(data => {
+                    messages = data.messages;
+                    current_transaction = null;
+                    renderChat();
+                });
+            });
+
+            document.getElementById("btn-cancel-tx").addEventListener("click", () => {
+                fetch("/api/cancel", {method: "POST"}).then(res => res.json()).then(() => {
+                    current_transaction = null;
+                    renderChat();
+                });
+            });
+        }, 0);
+    }
+
+    // Chat submit
+    chatForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        const text = userInput.value.trim();
+        if (!text) return;
+        
+        userInput.value = "";
+        messages.push({role: "user", content: text});
+        chatForm.classList.add("loading");
+        btnSend.disabled = true;
+        renderChat();
+        
+        fetch("/api/chat", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({user_input: text})
+        })
+        .then(res => res.json())
+        .then(data => {
+            chatForm.classList.remove("loading");
+            btnSend.disabled = false;
+            if (data.error) {
+                alert("Error: " + data.error);
+                return;
+            }
+            messages = data.messages;
+            current_transaction = data.current_transaction;
+            renderChat();
+        })
+        .catch(err => {
+            chatForm.classList.remove("loading");
+            btnSend.disabled = false;
+            console.error(err);
+            alert("Connection error. Please check server.");
+            renderChat();
+        });
+    });
+
+    // Clear history
+    btnClear.addEventListener("click", function() {
+        if (confirm("Are you sure you want to clear chat history?")) {
+            fetch("/api/clear", {method: "POST"}).then(res => res.json()).then(data => {
+                messages = [];
+                current_transaction = null;
+                renderChat();
+            });
+        }
+    });
+
+    // Add typing animation style if it doesn't exist
+    if (!document.getElementById('typing-style')) {
+        const style = document.createElement("style");
+        style.id = "typing-style";
+        style.innerHTML = `
+            .typing {
+                display: inline-block;
+                overflow: hidden;
+                border-right: .15em solid orange;
+                white-space: nowrap;
+                letter-spacing: .15em;
+                animation: typing 1s steps(4, end) infinite;
+            }
+            @keyframes typing {
+                from { width: 0 }
+                to { width: 100% }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Initial render
+    renderChat();
+})();
+</script>
+{% endblock %}

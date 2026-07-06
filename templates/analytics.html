@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block head %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="analytics-wrapper">
+    <div class="analytics-header glass">
+        <h1>Financial Analytics Dashboard</h1>
+    </div>
+
+    {% if is_empty %}
+    <div class="empty-state glass">
+        <h3>📭 No transactions yet.</h3>
+        <p>Go to the Chat page and add some transactions first!</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Chat</a>
+    </div>
+    {% else %}
+    
+    <div class="metrics-grid">
+        <div class="metric-card glass">
+            <h4>💰 Total Income</h4>
+            <h2>₹{{ "{:,.2f}".format(total_income) }}</h2>
+        </div>
+        <div class="metric-card glass">
+            <h4>💸 Total Expenses</h4>
+            <h2>₹{{ "{:,.2f}".format(total_expense) }}</h2>
+        </div>
+        <div class="metric-card glass">
+            <h4>📊 Net Balance</h4>
+            <h2 class="{{ 'positive' if net_balance >= 0 else 'negative' }}">₹{{ "{:,.2f}".format(net_balance) }}</h2>
+        </div>
+        <div class="metric-card glass">
+            <h4>📈 Saving Rate</h4>
+            <h2>{{ "{:.1f}".format(saving_rate) }}%</h2>
+        </div>
+    </div>
+
+    <div class="charts-section">
+        {% if trend_chart_json %}
+        <div class="chart-card glass full-width">
+            <div id="trendChart"></div>
+        </div>
+        {% endif %}
+
+        <div class="charts-row">
+            {% if expense_pie_json %}
+            <div class="chart-card glass half-width">
+                <div id="expensePie"></div>
+            </div>
+            {% endif %}
+            
+            {% if income_pie_json %}
+            <div class="chart-card glass half-width">
+                <div id="incomePie"></div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="details-section">
+        <div class="pending-card glass">
+            <h3>⏳ Pending Transactions</h3>
+            <div class="pending-summary">
+                <div class="summary-item">
+                    <span>💸 To Pay:</span>
+                    <strong>₹{{ "{:,.2f}".format(to_pay) }}</strong>
+                </div>
+                <div class="summary-item">
+                    <span>💰 To Receive:</span>
+                    <strong>₹{{ "{:,.2f}".format(to_receive) }}</strong>
+                </div>
+            </div>
+            
+            {% if pending_transactions %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Due Date</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pt in pending_transactions %}
+                        <tr>
+                            <td>{{ pt.Date }}</td>
+                            <td class="{{ 'overdue' if pt['Due Date'] < pt.Date else '' }}">{{ pt['Due Date'] }}</td>
+                            <td>₹{{ "{:,.2f}".format(pt.Amount) }}</td>
+                            <td><span class="badge {{ pt.Type | lower | replace(' ', '-') }}">{{ pt.Type }}</span></td>
+                            <td>{{ pt.Description }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No pending transactions.</p>
+            {% endif %}
+        </div>
+
+        <div class="recent-card glass">
+            <h3>🕐 Recent Transactions</h3>
+            {% if recent_transactions %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rt in recent_transactions %}
+                        <tr>
+                            <td>{{ rt.Date }}</td>
+                            <td>₹{{ "{:,.2f}".format(rt.Amount) }}</td>
+                            <td><span class="badge {{ rt.Type | lower }}">{{ rt.Type }}</span></td>
+                            <td>{{ rt.Category }}</td>
+                            <td>{{ rt.Description }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No recent transactions.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Render Plotly Charts (Minimal JS)
+        {% if trend_chart_json %}
+        var trendData = {{ trend_chart_json | safe }};
+        Plotly.newPlot('trendChart', trendData.data, trendData.layout, {responsive: true, displayModeBar: false});
+        {% endif %}
+
+        {% if expense_pie_json %}
+        var expData = {{ expense_pie_json | safe }};
+        Plotly.newPlot('expensePie', expData.data, expData.layout, {responsive: true, displayModeBar: false});
+        {% endif %}
+
+        {% if income_pie_json %}
+        var incData = {{ income_pie_json | safe }};
+        Plotly.newPlot('incomePie', incData.data, incData.layout, {responsive: true, displayModeBar: false});
+        {% endif %}
+    </script>
+    {% endif %}
+</div>
+{% endblock %}

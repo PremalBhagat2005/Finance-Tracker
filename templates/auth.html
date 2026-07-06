@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-wrapper">
+    <div class="auth-container glass">
+        <div class="auth-header">
+            <div class="auth-icon">💰</div>
+            <h1>Smart Finance Tracker</h1>
+            <p>Sign in to continue</p>
+        </div>
+
+        <div class="auth-tabs">
+            <a href="{{ url_for('login') }}" class="tab {{ 'active' if active_tab == 'login' else '' }}">Login</a>
+            <a href="{{ url_for('register') }}" class="tab {{ 'active' if active_tab == 'register' else '' }}">Register</a>
+        </div>
+
+        {% if active_tab == 'login' %}
+        <form action="{{ url_for('login') }}" method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Login</button>
+        </form>
+        {% else %}
+        <form action="{{ url_for('register') }}" method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" required placeholder="John Doe">
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
