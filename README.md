@@ -1,50 +1,46 @@
 # Smart Finance Tracker
 
-Smart Finance Tracker is an AI-powered expense and income tracking app built with Streamlit, Google Gemini, and MongoDB.
+Smart Finance Tracker is an AI-powered expense and income tracking app built with Flask, Google Gemini, and MongoDB.
 
-It originally used Google Sheets as the main storage layer, but it was migrated to MongoDB for better performance, scalability, and multi-user data handling. Google Sheets is now used for optional exports and downloadable reports.
+It originally used Google Sheets as the main storage layer and Streamlit for the frontend, but it was migrated to a Flask-based web application backed by MongoDB for better performance, scalability, and multi-user data handling. Google Sheets is now used for optional exports and downloadable reports.
 
 It lets you type transactions in natural language (for example, "spent 450 on recharge" or "will receive 14000 from job tomorrow"), then auto-detects amount, type, category, date, and pending status before saving to MongoDB.
 
 ## Project Highlights
 
-- Natural language transaction input using Gemini (`gemini-2.0-flash`)
-- Smart classification for:
+- **Web App Interface**: Modern, responsive web interface built with HTML, CSS, and Flask.
+- **User Authentication**: Secure multi-user login and registration system.
+- **Natural Language Input**: Transaction input using Gemini (`gemini-2.0-flash`).
+- **Smart Classification**: 
   - Expense
   - Income
   - To Receive (pending incoming)
   - To Pay (pending outgoing)
-- Auto date parsing (`today`, `yesterday`, `tomorrow`, `last/next ...`)
-- Keyword-enhanced category mapping for better reliability
-- Pending transaction workflow:
+- **Auto Date Parsing**: `today`, `yesterday`, `tomorrow`, `last/next ...`
+- **Pending Transaction Workflow**:
   - Save future/pending items in MongoDB
   - Auto-mark received/paid pending entries
-- Google Sheets export for user reports and downloadable backups
-- Analytics dashboard with:
+- **Analytics Dashboard**:
   - Income vs Expense KPIs
-  - Monthly trend chart
-  - Category breakdown
-  - Monthly summary
-  - Recent transactions
-  - Weekday vs weekend expense insights
+  - Monthly trend chart (Interactive Plotly Chart)
+  - Category breakdown pies
+  - Recent transactions list
   - Pending table with upcoming to-pay / to-receive totals
 
 ## Tech Stack
 
-- Python 3.14
-- Streamlit 1.56+
-- Gemini via `google-genai` (official SDK)
-- MongoDB Atlas or self-hosted MongoDB as the primary database
-- Google Sheets API for exports and reports
-- pandas 3.x
-- Plotly Express 6.x
-- Rich logging
+- **Backend**: Python 3.14+, Flask
+- **Frontend**: HTML5, Vanilla CSS, JS
+- **AI/NLP**: Gemini via `google-genai` (official SDK)
+- **Database**: MongoDB Atlas or self-hosted MongoDB
+- **Data Visualization**: pandas 3.x, Plotly Express 6.x
+- **Optional Integrations**: Google Sheets API for exports
 
 ## Project Structure
 
 ```text
 smart-finance-tracker/
-├── Home.py
+├── app.py                  # Main Flask application
 ├── requirements.txt
 ├── .env
 ├── README.md
@@ -53,15 +49,23 @@ smart-finance-tracker/
 │   └── constants.py
 ├── services/
 │   ├── __init__.py
-│   ├── auth.py
+│   ├── auth.py             # User authentication logic
+│   ├── chat.py             # Gemini AI processing logic
 │   ├── google_sheets.py
-│   └── mongo_store.py
-├── utils/
-│   ├── __init__.py
-│   └── logging_utils.py
-└── pages/
-  ├── 0_Login.py
-    └── 📊_Analytics.py
+│   └── mongo_store.py      # MongoDB database operations
+├── static/
+│   ├── css/
+│   │   └── style.css       # Main stylesheet
+│   └── js/
+│       └── main.js         # Frontend interactions
+├── templates/              # HTML Templates
+│   ├── auth.html           # Login/Register page
+│   ├── index.html          # Main chat interface
+│   ├── analytics.html      # Dashboard
+│   └── base.html           # Layout wrapper
+└── utils/
+    ├── __init__.py
+    └── logging_utils.py
 ```
 
 ## Setup
@@ -70,13 +74,12 @@ smart-finance-tracker/
 
 ```bash
 git clone <your-repo-url>
-cd Finance_Traker
+cd Finance_Tracker
 ```
 
 ### 2. Create and activate virtual environment
 
 Windows PowerShell:
-
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
@@ -87,12 +90,14 @@ python -m venv venv
 ```bash
 pip install -r requirements.txt
 ```
+*(Note: Ensure `flask` is installed if missing from requirements: `pip install flask`)*
 
 ### 4. Configure environment variables
 
 Create/update `.env`:
 
 ```env
+SECRET_KEY=your_flask_secret_key
 GEMINI_API_KEY=your_gemini_api_key
 MONGODB_URI=your_mongodb_connection_string
 MONGODB_DB_NAME=smart_finance_tracker
@@ -107,26 +112,22 @@ GOOGLE_SHEET_ID=your_google_sheet_id
 3. Set `MONGODB_DB_NAME` if you want a different database name.
 4. Make sure the app can reach MongoDB from your deployment host.
 
-### 6. Google Sheets export setup
-
-1. Create a Google Cloud service account and download the credentials JSON.
-2. Set `GOOGLE_SHEETS_CREDENTIALS` to the credentials file path.
-3. Set `GOOGLE_SHEET_ID` to the spreadsheet used for exports.
-
 ## Run the App
 
 ```bash
-streamlit run Home.py
+python app.py
 ```
 
-Open the local URL shown in terminal (usually `http://localhost:8501`).
+Open the local URL shown in terminal (usually `http://localhost:5000`).
 
 ## How to Use
+
+### Authentication
+Create an account or login to access your personal dashboard. Each user's data is completely isolated.
 
 ### Add transactions in chat
 
 Try examples like:
-
 - `Spent 500 on groceries yesterday`
 - `Got salary 50000 today`
 - `Need to pay rent 15000 next week`
@@ -146,71 +147,35 @@ The app extracts and pre-fills details in a confirmation form before saving.
 ### Analytics
 
 Go to the Analytics page to view:
-
 - Total income, total expense, net balance, savings rate
-- Monthly Income vs Expense trend
+- Monthly Income vs Expense trend (Interactive)
 - Category pies
-- Monthly summary table
 - Recent transactions
-- Weekday vs weekend spending
 - Pending table with future/open pending entries
 
 ## Data Model (MongoDB)
 
 ### `expenses` collection fields
-
-- `user_id`
-- `Date`
-- `Amount`
-- `Type`
-- `Category`
-- `Subcategory`
-- `Description`
-- `created_at`
+- `user_id`, `Date`, `Amount`, `Type`, `Category`, `Subcategory`, `Description`, `created_at`
 
 ### `pending` collection fields
-
-- `user_id`
-- `Date`
-- `Amount`
-- `Type`
-- `Category`
-- `Description`
-- `Due Date`
-- `Status`
-- `created_at`
+- `user_id`, `Date`, `Amount`, `Type`, `Category`, `Description`, `Due Date`, `Status`, `created_at`
 
 ### `users` collection fields
-
-- `name`
-- `email`
-- `password_salt`
-- `password_hash`
+- `name`, `email`, `password_salt`, `password_hash`
 
 ## Important Notes
 
 - Each signed-in user gets isolated expense and pending records in MongoDB by `user_id`.
-- Google Sheets is used only for export and sharing, not as the main data store.
-- Chat history is kept in Streamlit session state and is not persisted as a separate chat log.
-- Keep `.env` private.
-- Do not commit API keys or MongoDB credentials to public repositories.
-
-## Known Practical Behavior
-
-- If your analytics chart has only one month of data, lines appear as single points.
-- Future-dated transactions are excluded by default in date filters that end at today.
-  Use `Custom Range` to include future dates.
+- Keep `.env` private. Do not commit API keys or MongoDB credentials to public repositories.
 
 ## Future Improvements
 
 - Add transaction edit/delete UI
 - Add recurring transaction support
 - Export reports to CSV/PDF
-- Add authentication per user profile
 - Add budget alerts and spending limits
 
 ## License
 
-This project is licensed under the MIT License.
-
-See [LICENSE](LICENSE) for full text.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for full text.
