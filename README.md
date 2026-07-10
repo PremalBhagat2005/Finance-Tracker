@@ -1,12 +1,33 @@
-# Smart Finance Tracker
+# 💸 Smart Finance Tracker
+
+![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)
+![Flask](https://img.shields.io/badge/Flask-Web_Framework-black.svg)
+![MongoDB](https://img.shields.io/badge/MongoDB-Database-brightgreen.svg)
+![Gemini](https://img.shields.io/badge/AI-Google_Gemini-orange.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 Smart Finance Tracker is an AI-powered expense and income tracking app built with Flask, Google Gemini, and MongoDB.
 
 It originally used Google Sheets as the main storage layer and Streamlit for the frontend, but it was migrated to a Flask-based web application backed by MongoDB for better performance, scalability, and multi-user data handling. Google Sheets is now used for optional exports and downloadable reports.
 
-It lets you type transactions in natural language (for example, "spent 450 on recharge" or "will receive 14000 from job tomorrow"), then auto-detects amount, type, category, date, and pending status before saving to MongoDB.
+It lets you type transactions in natural language (for example, *"spent 450 on recharge"* or *"will receive 14000 from job tomorrow"*), then auto-detects amount, type, category, date, and pending status before saving to MongoDB.
 
-## Project Highlights
+## 📑 Table of Contents
+
+- [Project Highlights](#-project-highlights)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [Setup](#-setup)
+- [Run the App](#-run-the-app)
+- [How to Use](#-how-to-use)
+- [Data Model (MongoDB)](#-data-model-mongodb)
+- [Important Notes](#-important-notes)
+- [Future Improvements](#-future-improvements)
+- [License](#-license)
+
+---
+
+## ✨ Project Highlights
 
 - **Web App Interface**: Modern, responsive web interface built with HTML, CSS, and Flask.
 - **User Authentication**: Secure multi-user login and registration system.
@@ -27,7 +48,7 @@ It lets you type transactions in natural language (for example, "spent 450 on re
   - Recent transactions list
   - Pending table with upcoming to-pay / to-receive totals
 
-## Tech Stack
+## 🛠 Tech Stack
 
 - **Backend**: Python 3.14+, Flask
 - **Frontend**: HTML5, Vanilla CSS, JS
@@ -36,7 +57,7 @@ It lets you type transactions in natural language (for example, "spent 450 on re
 - **Data Visualization**: pandas 3.x, Plotly Express 6.x
 - **Optional Integrations**: Google Sheets API for exports
 
-## Project Structure
+## 📁 Project Structure
 
 ```text
 smart-finance-tracker/
@@ -68,7 +89,7 @@ smart-finance-tracker/
     └── logging_utils.py
 ```
 
-## Setup
+## ⚙️ Setup
 
 ### 1. Clone and open project
 
@@ -90,7 +111,7 @@ python -m venv venv
 ```bash
 pip install -r requirements.txt
 ```
-*(Note: Ensure `flask` is installed if missing from requirements: `pip install flask`)*
+> **Note**: Ensure `flask` is installed if missing from requirements: `pip install flask`
 
 ### 4. Configure environment variables
 
@@ -112,7 +133,7 @@ GOOGLE_SHEET_ID=your_google_sheet_id
 3. Set `MONGODB_DB_NAME` if you want a different database name.
 4. Make sure the app can reach MongoDB from your deployment host.
 
-## Run the App
+## ▶️ Run the App
 
 ```bash
 python app.py
@@ -120,7 +141,7 @@ python app.py
 
 Open the local URL shown in terminal (usually `http://localhost:5000`).
 
-## How to Use
+## 💡 How to Use
 
 ### Authentication
 Create an account or login to access your personal dashboard. Each user's data is completely isolated.
@@ -153,7 +174,7 @@ Go to the Analytics page to view:
 - Recent transactions
 - Pending table with future/open pending entries
 
-## Data Model (MongoDB)
+## 🗄️ Data Model (MongoDB)
 
 ### `expenses` collection fields
 - `user_id`, `Date`, `Amount`, `Type`, `Category`, `Subcategory`, `Description`, `created_at`
@@ -164,18 +185,18 @@ Go to the Analytics page to view:
 ### `users` collection fields
 - `name`, `email`, `password_salt`, `password_hash`
 
-## Important Notes
+## ⚠️ Important Notes
 
 - Each signed-in user gets isolated expense and pending records in MongoDB by `user_id`.
 - Keep `.env` private. Do not commit API keys or MongoDB credentials to public repositories.
 
-## Future Improvements
+## 🚀 Future Improvements
 
 - Add transaction edit/delete UI
 - Add recurring transaction support
 - Export reports to CSV/PDF
 - Add budget alerts and spending limits
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for full text.
