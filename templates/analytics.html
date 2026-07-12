@@ -6,8 +6,13 @@
 
 {% block content %}
 <div class="analytics-wrapper">
-    <div class="analytics-header glass">
-        <h1>Financial Analytics Dashboard</h1>
+    <div class="analytics-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-light);">
+        <h1 style="font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #fff, #a1a1aa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Financial Analytics Dashboard</h1>
+        {% if not is_empty %}
+        <a href="{{ url_for('export_excel') }}" class="btn btn-outline" style="display: flex; align-items: center; gap: 8px; border-color: rgba(255,255,255,0.2);">
+            <i data-lucide="download"></i> Export Excel
+        </a>
+        {% endif %}
     </div>
 
     {% if is_empty %}

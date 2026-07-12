@@ -295,6 +295,21 @@
         document.head.appendChild(style);
     }
 
+    // Make suggestions clickable
+    const suggestions = document.querySelectorAll('.chat-sidebar ul li');
+    suggestions.forEach(li => {
+        li.style.cursor = 'pointer';
+        li.title = 'Click to copy to input';
+        li.addEventListener('click', () => {
+            let text = li.textContent.trim();
+            if (text.startsWith("'") && text.endsWith("'")) {
+                text = text.substring(1, text.length - 1);
+            }
+            userInput.value = text;
+            userInput.focus();
+        });
+    });
+
     // Initial render
     renderChat();
 })();

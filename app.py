@@ -1,9 +1,10 @@
 import os
+import io
 import json
 import datetime
 import pandas as pd
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 import plotly.express as px
 import plotly.utils
 
@@ -166,6 +167,33 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
+@app.route("/export/excel")
+def export_excel():
+    if not is_authenticated():
+        return redirect(url_for("login"))
+        
+    user = session.get("current_user")
+    df = get_transactions_data(user["user_id"])
+    
+    if df.empty:
+        flash("No transactions to export.", "error")
+        return redirect(url_for("analytics"))
+        
+    export_df = df.copy()
+    if 'Date' in export_df.columns:
+        export_df['Date'] = pd.to_datetime(export_df['Date']).dt.strftime('%Y-%m-%d')
+    if 'Due Date' in export_df.columns:
+        export_df['Due Date'] = pd.to_datetime(export_df['Due Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        export_df.to_excel(writer, index=False, sheet_name='Transactions')
+    
+    output.seek(0)
+    
+    filename = f"finance_tracker_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 @app.route("/analytics")
 def analytics():
     if not is_authenticated():
@@ -267,4 +295,4 @@ def analytics():
                            recent_transactions=recent_transactions)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
