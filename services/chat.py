@@ -152,6 +152,7 @@ def process_user_input(text: str) -> dict:
 	numbers = re.findall(r'\b\d{1,8}(?:\.\d{1,2})?\b', text)
 	fallback_amount = max(float(n) for n in numbers) if numbers else 0.0
 
+	categories_str = json.dumps(CATEGORIES, indent=2)
 	prompt = f"""Extract and classify ALL details from this financial transaction in a SINGLE step.
 
 Transaction: "{text}"
@@ -169,8 +170,9 @@ DUE_DATE: null
 Rules:
 1. Choose TYPE from: EXPENSE_NORMAL, INCOME_NORMAL, PENDING_TO_RECEIVE, PENDING_TO_PAY, PENDING_RECEIVED, PENDING_PAID
 2. AMOUNT: extract ONLY the number. No currency symbols.
-3. If no CATEGORY applies, write "Other".
-4. If no SUBCATEGORY applies, write "Miscellaneous".
+3. Choose CATEGORY and SUBCATEGORY strictly from this mapping based on the TYPE:
+{categories_str}
+4. If absolutely no CATEGORY applies, write "Other".
 5. DUE_DATE is for pending transactions. If not pending, write "null".
 """
 	try:
@@ -250,11 +252,11 @@ Rules:
 	default_cat = valid_cats[0] if valid_cats else "Other"
 	default_sub = (CATEGORIES.get(display_type, {}).get(default_cat, ["Other"]))[0] if valid_cats else "Miscellaneous"
 
-	if category not in valid_cats:
+	if category not in valid_cats or category == "Other":
 		inf_c, inf_s = infer_category_from_keywords(display_type, text, description)
 		if inf_c and inf_s:
 			category, subcategory = inf_c, inf_s
-		else:
+		elif category not in valid_cats:
 			category, subcategory = default_cat, default_sub
 	else:
 		valid_subs = CATEGORIES.get(display_type, {}).get(category, [default_sub])

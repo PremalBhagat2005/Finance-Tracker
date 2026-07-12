@@ -1,13 +1,10 @@
 import logging
-from rich.console import Console
-from rich.logging import RichHandler
+
 
 def setup_logging(logger_name: str) -> logging.Logger:
-    console = Console()
     logging.basicConfig(
         level=logging.INFO,
-        format="%(message)s",
-        handlers=[RichHandler(console=console, rich_tracebacks=True)]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     logger = logging.getLogger(logger_name)
     return logger
