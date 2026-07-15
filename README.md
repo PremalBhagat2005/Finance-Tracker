@@ -1,4 +1,4 @@
-# 💸 Smart Finance Tracker
+#  💸 Smart Finance Tracker
 
 ![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-Web_Framework-black.svg)
