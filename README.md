@@ -139,7 +139,7 @@ GOOGLE_SHEET_ID=your_google_sheet_id
 python app.py
 ```
 
-Open the local URL shown in terminal (usually `http://localhost:5000`).
+Open the local URL shown in terminal (usually `http://localhost:5001`).
 
 ## 💡 How to Use
 
@@ -194,7 +194,7 @@ Go to the Analytics page to view:
 
 - Add transaction edit/delete UI
 - Add recurring transaction support
-- Export reports to CSV/PDF
+- Export reports to PDF (Excel export is supported)
 - Add budget alerts and spending limits
 
 ## 📄 License
